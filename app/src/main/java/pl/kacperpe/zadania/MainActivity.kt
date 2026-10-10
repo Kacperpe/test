@@ -1,5 +1,7 @@
 package pl.kacperpe.zadania
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -18,7 +20,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -30,8 +31,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -60,6 +59,17 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.horizontalScroll
 import kotlin.math.roundToInt
 
 private val Bg = Color(0xFF302E2B)
@@ -82,6 +92,11 @@ private val ANGLES = listOf(
     "promotion" to "Promocja", "opening" to "Debiut", "middlegame" to "Gra środkowa", "endgame" to "Końcówka",
 )
 
+private val DIFFS = listOf(
+    "auto" to "Auto", "easiest" to "Najłatwiejsze", "easier" to "Łatwiejsze",
+    "normal" to "Normalne", "harder" to "Trudniejsze", "hardest" to "Najtrudniejsze",
+)
+
 class MainActivity : ComponentActivity() {
     private val vm: PuzzleVm by viewModels()
 
@@ -89,7 +104,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val bar = SystemBarStyle.dark(0xFF262522.toInt())
         enableEdgeToEdge(statusBarStyle = bar, navigationBarStyle = bar)
+        if (savedInstanceState == null) intent?.data?.let { vm.handleRedirect(it) }
         setContent { App(vm) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.data?.let { vm.handleRedirect(it) }
     }
 }
 
@@ -102,43 +123,34 @@ private fun pieceRes(c: Char): Int = when (c) {
 
 @Composable
 fun App(vm: PuzzleVm) {
+    var menu by remember { mutableStateOf(false) }
+    var stats by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(Panel).systemBarsPadding().background(Bg)) {
-        Header(vm)
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(vertical = 10.dp),
-        ) {
-            items(ANGLES) { (key, label) ->
-                val on = vm.angle == key
-                Text(
-                    label,
-                    color = if (on) Color.White else Muted,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if (on) Green else Chip)
-                        .clickable { vm.pickAngle(key) }.padding(horizontal = 14.dp, vertical = 8.dp),
-                )
-            }
-        }
+        Header(vm, onMenu = { menu = true }, onStats = { stats = true })
+        Spacer(Modifier.weight(0.5f))
         Banner(vm)
         Board(vm)
-        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            val pz = vm.puzzle
-            Text(if (pz != null) "Zadanie #${pz.id}" else "", color = Muted, fontSize = 13.sp)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            val label = ANGLES.firstOrNull { it.first == vm.angle }?.second ?: vm.angle
+            ChipText("$label  ▾", false) { menu = true }
             Spacer(Modifier.weight(1f))
-            if (pz != null) Text("Trudność ${pz.rating}", color = Muted, fontSize = 13.sp)
+            Column(horizontalAlignment = Alignment.End) {
+                vm.puzzle?.let { Text("#${it.id} · trudność ${it.rating}", color = Muted, fontSize = 13.sp) }
+                vm.syncError?.let { Text(it, color = Red, fontSize = 11.sp) }
+            }
         }
         Spacer(Modifier.weight(1f))
         Actions(vm)
     }
     if (vm.promo != null) PromoDialog(vm)
+    if (menu) SettingsDialog(vm) { menu = false }
+    if (stats) ProgressDialog(vm) { stats = false }
 }
 
 @Composable
-private fun Header(vm: PuzzleVm) {
+private fun Header(vm: PuzzleVm, onMenu: () -> Unit, onStats: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(Panel).padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth().background(Panel).padding(start = 16.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Image(painterResource(R.drawable.wn), null, Modifier.size(28.dp))
@@ -147,9 +159,12 @@ private fun Header(vm: PuzzleVm) {
         Spacer(Modifier.weight(1f))
         if (vm.streak > 1) {
             Text("🔥 ${vm.streak}", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(6.dp))
         }
-        Column(horizontalAlignment = Alignment.End) {
+        Column(
+            Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onStats).padding(horizontal = 10.dp, vertical = 4.dp),
+            horizontalAlignment = Alignment.End,
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("${vm.rating}", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
                 vm.delta?.let {
@@ -157,7 +172,171 @@ private fun Header(vm: PuzzleVm) {
                     Text(if (it > 0) "+$it" else "$it", color = if (it > 0) Green else Red, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
             }
-            Text("ranking", color = Muted, fontSize = 11.sp)
+            Text(if (vm.logged) "Lichess · postęp ›" else "ranking · postęp ›", color = Muted, fontSize = 11.sp)
+        }
+        Text(
+            "☰", color = Color.White, fontSize = 22.sp,
+            modifier = Modifier.clip(CircleShape).clickable(onClick = onMenu).padding(horizontal = 12.dp, vertical = 8.dp),
+        )
+    }
+}
+
+@Composable
+private fun ChipText(text: String, on: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Text(
+        text,
+        color = if (on) Color.White else Color(0xFFD6D5D3),
+        fontSize = 14.sp,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = 1,
+        textAlign = TextAlign.Center,
+        modifier = modifier.clip(RoundedCornerShape(8.dp)).background(if (on) Green else Chip)
+            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 9.dp),
+    )
+}
+
+@Composable
+private fun Sheet(title: String, onClose: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(Modifier.fillMaxWidth(0.93f).heightIn(max = 640.dp).clip(RoundedCornerShape(14.dp)).background(Bg)) {
+            Row(Modifier.fillMaxWidth().background(Panel).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("✕", color = Muted, fontSize = 18.sp, modifier = Modifier.clip(CircleShape).clickable(onClick = onClose).padding(14.dp))
+            }
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), content = content)
+        }
+    }
+}
+
+@Composable
+private fun Label(t: String) {
+    Text(t.uppercase(), color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp, bottom = 8.dp))
+}
+
+@Composable
+private fun SettingsDialog(vm: PuzzleVm, onClose: () -> Unit) {
+    val ctx = LocalContext.current
+    Sheet("Ustawienia", onClose) {
+        Label("Konto Lichess")
+        if (vm.logged) {
+            Text("Zalogowano jako ${vm.user ?: "konto Lichess"}", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Wyniki zapisują się na Twoim koncie, a zadania są dobierane do Twojego rankingu Lichess i się nie powtarzają.",
+                color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
+            )
+            Btn("Wyloguj", false, Modifier.fillMaxWidth()) { vm.logout() }
+        } else {
+            Text(
+                "Po zalogowaniu wyniki zapisują się w historii zadań na Lichess, a zadania są dobierane do Twojego rankingu.",
+                color = Muted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 10.dp),
+            )
+            Btn(if (vm.loggingIn) "Logowanie…" else "Zaloguj przez Lichess", true, Modifier.fillMaxWidth()) {
+                try {
+                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(vm.loginUrl())))
+                } catch (_: Exception) {
+                }
+            }
+        }
+        vm.loginMsg?.let { Text(it, color = Red, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp)) }
+
+        Spacer(Modifier.height(12.dp))
+        Label("Trudność")
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((k, l) in DIFFS) ChipText(l, vm.diff == k) { vm.pickDiff(k) }
+        }
+        Text(
+            "Liczona względem Twojego rankingu (około ±300 i ±600 punktów). Auto dopasowuje poziom samo. Działa od następnego zadania.",
+            color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp),
+        )
+
+        Spacer(Modifier.height(12.dp))
+        Label("Motyw")
+        for (pair in ANGLES.chunked(2)) {
+            Row(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for ((k, l) in pair) ChipText(l, vm.angle == k, Modifier.weight(1f)) { vm.pickAngle(k); onClose() }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProgressDialog(vm: PuzzleVm, onClose: () -> Unit) {
+    val pts = vm.history.filter { it.l == vm.logged }
+    val wins = pts.count { it.w }
+    Sheet(if (vm.logged) "Postęp · Lichess" else "Postęp", onClose) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Stat("${vm.rating}", "ranking", Modifier.weight(1f))
+            Stat("${pts.size}", "zadań", Modifier.weight(1f))
+            Stat(if (pts.isEmpty()) "–" else "${wins * 100 / pts.size}%", "skuteczność", Modifier.weight(1f))
+            Stat("${vm.best}", "rekord serii", Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(14.dp))
+        Label("Ranking")
+        if (pts.size < 2) {
+            Text("Rozwiąż kilka zadań, a pojawi się tu wykres rankingu.", color = Muted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 24.dp))
+        } else {
+            val shown = pts.takeLast(200).map { it.r }
+            Chart(shown)
+            Text("ostatnie ${shown.size} zadań", color = Muted, fontSize = 11.sp, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+        }
+        if (pts.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            Label("Ostatnie wyniki")
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                for (e in pts.takeLast(18)) {
+                    Box(Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(4.dp)).background(if (e.w) Green else Red), contentAlignment = Alignment.Center) {
+                        Text(if (e.w) "✓" else "✕", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Stat(value: String, label: String, modifier: Modifier) {
+    Column(
+        modifier.clip(RoundedCornerShape(10.dp)).background(Panel).padding(vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(value, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+        Text(label, color = Muted, fontSize = 10.sp, maxLines = 1)
+    }
+}
+
+@Composable
+private fun Chart(v: List<Int>) {
+    var lo = v.min()
+    var hi = v.max()
+    if (hi - lo < 40) { val mid = (hi + lo) / 2; lo = mid - 20; hi = mid + 20 }
+    Row(Modifier.fillMaxWidth().height(190.dp)) {
+        Column(Modifier.fillMaxHeight().padding(end = 8.dp), verticalArrangement = Arrangement.SpaceBetween, horizontalAlignment = Alignment.End) {
+            for (l in listOf(hi, (hi + lo) / 2, lo)) Text("$l", color = Muted, fontSize = 11.sp)
+        }
+        Canvas(Modifier.weight(1f).fillMaxHeight()) {
+            val pad = 8.dp.toPx()
+            val h = size.height - 2 * pad
+            val w = size.width - pad
+            for (i in 0..2) {
+                val y = pad + h * i / 2
+                drawLine(Color(0x22FFFFFF), Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
+            }
+            fun pt(i: Int) = Offset(w * i / (v.size - 1), pad + h * (hi - v[i]) / (hi - lo).toFloat())
+            val line = Path().apply {
+                moveTo(pt(0).x, pt(0).y)
+                for (i in 1 until v.size) lineTo(pt(i).x, pt(i).y)
+            }
+            val fill = Path().apply {
+                addPath(line)
+                lineTo(pt(v.size - 1).x, size.height)
+                lineTo(0f, size.height)
+                close()
+            }
+            drawPath(fill, Brush.verticalGradient(listOf(Green.copy(alpha = 0.35f), Color.Transparent)))
+            drawPath(line, Green, style = Stroke(2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawCircle(Green, 5.dp.toPx(), pt(v.size - 1))
+            drawCircle(Color.White, 2.dp.toPx(), pt(v.size - 1))
         }
     }
 }

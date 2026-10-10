@@ -5,7 +5,9 @@ Aplikacja na Androida z samymi zadaniami szachowymi. Zadania pobierane są z otw
 - zielona szachownica i ciemny motyw, ruch przez dotknięcie lub przeciągnięcie
 - przeciwnik wykonuje pierwszy ruch, potem szukasz najlepszej odpowiedzi
 - podpowiedź (drugie dotknięcie rysuje strzałkę), ponowienie, pokazanie rozwiązania, lokalny ranking i seria
-- wybór motywu (mat w 1/2/3, widełki, związanie, końcówki…)
+- logowanie do Lichess (OAuth, PKCE): wyniki trafiają do historii zadań na koncie
+- ekran postępu z wykresem rankingu
+- wybór trudności i motywu w ustawieniach (☰); dostępne motywy: (mat w 1/2/3, widełki, związanie, końcówki…)
 
 ## Build
 
