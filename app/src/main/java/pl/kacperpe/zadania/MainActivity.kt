@@ -72,11 +72,13 @@ fun App(vm: PuzzleVm) {
     val onMenu = { menu = true }
     val onStats = { stats = true }
     BoxWithConstraints(Modifier.fillMaxSize().background(Panel).systemBarsPadding().background(Bg)) {
-        if (maxWidth > maxHeight) {
+        val boxW = maxWidth
+        val boxH = maxHeight
+        if (boxW > boxH) {
             // poziomo / tablet: plansza po lewej, panel po prawej
             Row(Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxHeight().padding(6.dp), contentAlignment = Alignment.Center) {
-                    Board(vm, Modifier.size(min(maxHeight - 12.dp, maxWidth * 0.6f)))
+                    Board(vm, Modifier.size(min(boxH - 12.dp, boxW * 0.6f)))
                 }
                 Column(Modifier.weight(1f).fillMaxHeight()) {
                     Header(vm, onMenu, onStats)
@@ -88,7 +90,7 @@ fun App(vm: PuzzleVm) {
                 }
             }
         } else {
-            val side: Dp = min(maxWidth, maxHeight - 300.dp).coerceAtLeast(180.dp)
+            val side: Dp = min(boxW, boxH - 300.dp).coerceAtLeast(180.dp)
             Column(Modifier.fillMaxSize()) {
                 Header(vm, onMenu, onStats)
                 DayBar(vm, onStats)
