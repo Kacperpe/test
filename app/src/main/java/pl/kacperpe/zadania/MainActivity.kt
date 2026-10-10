@@ -49,6 +49,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -71,6 +72,7 @@ private val GreenDark = Color(0xFF5D9948)
 private val Red = Color(0xFFE5483B)
 private val Hl = Color(0x99F5F646)
 private val HintCol = Color(0xB34FC3F7)
+private val ArrowCol = Color(0xCCF7A62B)
 private val Muted = Color(0xFFA9A8A6)
 
 private val ANGLES = listOf(
@@ -316,6 +318,35 @@ private fun Board(vm: PuzzleVm) {
                 y = row(anim.move.from) + (y - row(anim.move.from)) * t
             }
             Image(painterResource(pieceRes(ch)), null, Modifier.offset(cell * x, cell * y).size(cell))
+        }
+
+        vm.arrow?.let { a ->
+            Canvas(Modifier.fillMaxSize()) {
+                val c = size.width / 8
+                val from = Offset(col(a.from) * c + c / 2, row(a.from) * c + c / 2)
+                val to = Offset(col(a.to) * c + c / 2, row(a.to) * c + c / 2)
+                val v = to - from
+                val len = v.getDistance()
+                if (len > 0f) {
+                    val u = v / len
+                    val n = Offset(-u.y, u.x)
+                    val head = c * 0.42f
+                    val base = to - u * head
+                    val start = from + u * (c * 0.32f)
+                    val w = c * 0.11f
+                    val path = Path().apply {
+                        moveTo((start + n * w).x, (start + n * w).y)
+                        lineTo((base + n * w).x, (base + n * w).y)
+                        lineTo((base + n * (c * 0.27f)).x, (base + n * (c * 0.27f)).y)
+                        lineTo(to.x, to.y)
+                        lineTo((base - n * (c * 0.27f)).x, (base - n * (c * 0.27f)).y)
+                        lineTo((base - n * w).x, (base - n * w).y)
+                        lineTo((start - n * w).x, (start - n * w).y)
+                        close()
+                    }
+                    drawPath(path, ArrowCol)
+                }
+            }
         }
 
         vm.badge?.let { (sq, ok) ->

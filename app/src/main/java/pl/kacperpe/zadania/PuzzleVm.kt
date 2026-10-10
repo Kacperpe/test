@@ -49,6 +49,7 @@ class PuzzleVm(app: Application) : AndroidViewModel(app) {
     var anim by mutableStateOf<Anim?>(null); private set
     var selected by mutableIntStateOf(-1); private set
     var hint by mutableIntStateOf(-1); private set
+    var arrow by mutableStateOf<Move?>(null); private set
     var badge by mutableStateOf<Pair<Int, Boolean>?>(null); private set
     var promo by mutableStateOf<Pair<Int, Int>?>(null); private set
     var error by mutableStateOf<String?>(null); private set
@@ -105,7 +106,7 @@ class PuzzleVm(app: Application) : AndroidViewModel(app) {
         job?.cancel()
         job = viewModelScope.launch {
             status = Status.LOADING
-            error = null; badge = null; hint = -1; selected = -1; promo = null
+            error = null; badge = null; hint = -1; arrow = null; selected = -1; promo = null
             try {
                 val pz = withContext(Dispatchers.IO) {
                     var p = fetch()
@@ -187,7 +188,7 @@ class PuzzleVm(app: Application) : AndroidViewModel(app) {
         val before = pos
         val beforeLast = lastMove
         val expected = before.fromUci(pz.solution[step])
-        hint = -1
+        hint = -1; arrow = null
         play(m, animate)
         val mate = pos.isMate()
         if (m == expected || mate) {
@@ -240,6 +241,7 @@ class PuzzleVm(app: Application) : AndroidViewModel(app) {
         if (!myTurn) return
         val pz = puzzle ?: return
         val m = pos.fromUci(pz.solution[step]) ?: return
+        if (hint == m.from) arrow = m
         hint = m.from
         selected = -1
         if (!failed) { failed = true; streak = 0; prefs.edit().putInt("streak", 0).apply() }
@@ -249,7 +251,7 @@ class PuzzleVm(app: Application) : AndroidViewModel(app) {
         val pz = puzzle ?: return
         if (status == Status.WRONG) revert() else if (!myTurn) return
         if (!failed) { failed = true; rate(false) }
-        hint = -1
+        hint = -1; arrow = null
         status = Status.SHOWING
         job = viewModelScope.launch {
             while (step < pz.solution.size) {
