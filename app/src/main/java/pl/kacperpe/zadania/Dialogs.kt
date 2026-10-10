@@ -59,7 +59,7 @@ import androidx.compose.ui.window.DialogProperties
 private fun Sheet(title: String, onClose: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
-            Modifier.fillMaxWidth(0.94f).widthIn(max = 520.dp).fillMaxHeight(0.9f)
+            Modifier.widthIn(max = 520.dp).fillMaxWidth(0.94f).fillMaxHeight(0.9f)
                 .clip(RoundedCornerShape(14.dp)).background(Bg),
         ) {
             Row(Modifier.fillMaxWidth().background(Panel).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -69,6 +69,8 @@ class Review(val id: String, val raw: String, val due: Long)
 
 class AuthException : IOException("Sesja Lichess wygasła. Zaloguj się ponownie.")
 
+class HttpException(val code: Int) : IOException("Lichess odpowiedział kodem $code")
+
 private const val API = "https://lichess.org"
 private const val CLIENT = "pl.kacperpe.zadania"
 private const val REDIRECT = "pl.kacperpe.zadania://oauth"
@@ -233,7 +235,7 @@ class PuzzleVm(app: Application) : AndroidViewModel(app) {
             val code = c.responseCode
             if (code == 429) throw IOException("Za dużo zapytań do Lichess. Odczekaj minutę.")
             if (code == 401 && auth != null) throw AuthException()
-            if (code !in 200..299) throw IOException("Lichess odpowiedział kodem $code")
+            if (code !in 200..299) throw HttpException(code)
             return c.inputStream.bufferedReader().use { it.readText() }
         } finally {
             c.disconnect()
@@ -265,14 +267,29 @@ class PuzzleVm(app: Application) : AndroidViewModel(app) {
 
     private suspend fun batch(angle: String, difficulty: String, nb: Int): List<String> {
         val path = "/api/puzzle/batch/$angle?nb=$nb&difficulty=$difficulty"
-        val res = try {
-            call("GET", path, auth = token)
-        } catch (e: AuthException) {
-            clearLogin(e.message)
-            call("GET", path)
+        try {
+            val res = try {
+                call("GET", path, auth = token)
+            } catch (e: AuthException) {
+                clearLogin(e.message)
+                call("GET", path)
+            }
+            val arr = JSONObject(res).getJSONArray("puzzles")
+            if (arr.length() > 0) return List(arr.length()) { arr.getJSONObject(it).toString() }
+        } catch (e: HttpException) {
+            // paczka niedostępna: niżej pobieramy pojedynczo
         }
-        val arr = JSONObject(res).getJSONArray("puzzles")
-        return List(arr.length()) { arr.getJSONObject(it).toString() }
+        val one = "/api/puzzle/next?angle=$angle&difficulty=$difficulty"
+        val out = ArrayList<String>()
+        for (i in 0 until minOf(nb, 5)) {
+            try {
+                out.add(call("GET", one, auth = token))
+            } catch (e: IOException) {
+                if (out.isEmpty()) throw e
+                break
+            }
+        }
+        return out
     }
 
     private suspend fun refill() {
