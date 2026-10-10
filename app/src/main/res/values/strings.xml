@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Zadania Szachowe</string>
+    <color name="bg">#302E2B</color>
+    <color name="green">#81B64C</color>
+    <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+    </style>
+</resources>
